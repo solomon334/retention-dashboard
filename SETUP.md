@@ -1,137 +1,73 @@
 # Setup Guide
 
-This is the Retention Snapshot dashboard as a hosted Next.js app. Follow these steps once to get it live on Vercel. After that, it auto-deploys whenever you push to GitHub, and reads live data from Google Sheets on each page load.
-
----
-
-## What you need
-
-- A GitHub account (free)
-- A Vercel account (free tier is fine)
-- A Google Cloud project with a service account (free)
-- The shared password you want to use to protect the dashboard
+No Google credentials needed. The dashboard reads from a static data snapshot that gets bundled with the app. You update the data by copying a file and pushing.
 
 ---
 
 ## Step 1 — Create a GitHub repo
 
 1. Go to https://github.com/new
-2. Name the repo `retention-dashboard` (or whatever you want)
-3. Set it to **Private**
-4. Do not add a README — you'll push the existing code
-5. Click **Create repository**
-
-GitHub will show you commands to push an existing repo. In your terminal:
+2. Name it `retention-dashboard`, set it to **Private**, no README
+3. Click **Create repository**
+4. Run these commands in your terminal:
 
 ```bash
 cd /Users/solomonhanes/hq/repos/private/retention-dashboard
-git init
 git add .
-git commit -m "Initial retention dashboard"
-git branch -M main
+git commit -m "Initial dashboard"
 git remote add origin https://github.com/YOUR_USERNAME/retention-dashboard.git
 git push -u origin main
 ```
 
 ---
 
-## Step 2 — Create a Google service account
+## Step 2 — Deploy to Vercel
 
-This lets the app read your brand's Google Sheets without a browser login.
-
-1. Go to https://console.cloud.google.com
-2. Create a new project (or use an existing one). Call it `retention-dashboard`.
-3. In the left sidebar go to **APIs & Services > Library**
-4. Search for **Google Sheets API** and click **Enable**
-5. Go to **APIs & Services > Credentials**
-6. Click **Create Credentials > Service account**
-7. Name it `retention-dashboard-reader`, click **Create and Continue**, skip the optional steps, click **Done**
-8. Click the service account you just created, go to the **Keys** tab
-9. Click **Add Key > Create new key**, choose **JSON**, click **Create**
-10. A `.json` file will download to your machine — keep it safe, treat it like a password
-
-**Share your sheets with the service account:**
-
-Open the JSON file. Find the `client_email` field — it looks like `retention-dashboard-reader@your-project.iam.gserviceaccount.com`.
-
-For each brand's Google Sheet, click **Share** and add that email as a **Viewer**. You only need to do this once per sheet. The easiest way: open each brand's sheet and share it. If the sheets are already shared at the folder level, you may only need to share the folder.
+1. Go to https://vercel.com, sign in with GitHub
+2. Click **Add New > Project**, import `retention-dashboard`
+3. Vercel auto-detects Next.js — leave all settings as-is
+4. Under **Environment Variables**, add one:
+   - Name: `DASHBOARD_PASSWORD`
+   - Value: whatever password you want (e.g. `kynship2025`)
+5. Click **Deploy** — takes about 60 seconds
+6. You'll get a URL like `https://retention-dashboard-xyz.vercel.app`
 
 ---
 
-## Step 3 — Deploy to Vercel
+## Sharing
 
-1. Go to https://vercel.com and sign in (use GitHub to sign in — easiest)
-2. Click **Add New > Project**
-3. Import your `retention-dashboard` GitHub repo
-4. Vercel will auto-detect it as a Next.js app — leave all settings as-is
-5. Before clicking **Deploy**, click **Environment Variables** and add these two:
-
-**Variable 1:**
-- Name: `DASHBOARD_PASSWORD`
-- Value: the shared password you want (e.g. `kynship2024`)
-
-**Variable 2:**
-- Name: `GOOGLE_SERVICE_ACCOUNT_JSON`
-- Value: open the JSON key file you downloaded in Step 2, copy the **entire contents** as one line, and paste it here
-
-6. Click **Deploy**
-
-Vercel will build and deploy the app. It takes about 60 seconds. When it finishes, you'll get a URL like `https://retention-dashboard-xyz.vercel.app`.
+Send your coworker the URL and the password. Done.
 
 ---
 
-## Step 4 — Share it
+## Refreshing the data
 
-Send your coworker:
-- The Vercel URL
-- The shared password
+The dashboard shows whatever is in `data/snapshot.json`. When you want fresh data:
 
-They open the URL, enter the password, and they're in. The password is stored in a cookie for 30 days so they don't have to re-enter it every time.
-
----
-
-## Keeping data fresh
-
-The app re-reads all brand sheets once per hour automatically (Vercel's edge cache revalidates on the first request after the hour). You don't need to do anything — it always shows fresh data.
-
-If you add a new brand or change a sheet ID, update the `BRANDS` array in `lib/brands.ts`, commit, and push. Vercel auto-deploys within a minute.
-
----
-
-## Adding a brand
-
-1. Open `lib/brands.ts`
-2. Add an entry to the `BRANDS` array:
-   ```ts
-   { id: "brand-slug", name: "Brand Name", platform: "Stay AI", sheetId: "THE_SHEET_ID" },
+1. In your Claude Code terminal, run the data builder in the localhost prototype:
+   ```bash
+   cd /Users/solomonhanes/hq/personal/tools/retention-snapshot
+   node build-data.mjs
    ```
-   The sheet ID is the long string in the Google Sheets URL between `/d/` and `/edit`.
-3. Share the sheet with the service account email (see Step 2)
-4. Commit and push — Vercel deploys automatically
-
----
-
-## Local development
-
-```bash
-cd repos/private/retention-dashboard
-cp .env.example .env.local
-# Fill in .env.local with your real values
-npm install
-npm run dev
-```
-
-Open http://localhost:3000. The app runs the same code as production, reading live from Google Sheets.
+2. Copy the output into the hosted app:
+   ```bash
+   cp data.json /Users/solomonhanes/hq/repos/private/retention-dashboard/data/snapshot.json
+   ```
+3. Commit and push:
+   ```bash
+   cd /Users/solomonhanes/hq/repos/private/retention-dashboard
+   git add data/snapshot.json
+   git commit -m "Refresh data"
+   git push
+   ```
+4. Vercel auto-deploys within a minute — the live site shows the new data
 
 ---
 
 ## Troubleshooting
 
-**"Could not load data" on the homepage:**
-The `GOOGLE_SERVICE_ACCOUNT_JSON` env var is either missing or malformed. Make sure you pasted the full JSON as a single line in Vercel, with no line breaks.
+**Redirects to /login with the right password:**
+Check that `DASHBOARD_PASSWORD` in Vercel exactly matches what you're typing (case-sensitive, no trailing spaces).
 
-**A brand shows no chart lines:**
-The service account probably doesn't have access to that brand's sheet. Share the sheet with the service account email and redeploy.
-
-**The page redirects to /login even with the right password:**
-Check that `DASHBOARD_PASSWORD` is set in Vercel's environment variables and matches exactly what you're typing.
+**Dashboard shows no data:**
+The `data/snapshot.json` file may be missing or malformed. Re-copy from the prototype and push again.
